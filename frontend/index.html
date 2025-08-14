@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>电子相框控制台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>电子相框控制台</h1>
+
+<div id="status">
+  <p>当前文件: <span id="currentFile">-</span></p>
+  <p>进度: <span id="progress">0%</span></p>
+  <p>温度: <span id="temperature">0°C</span></p>
+</div>
+
+<h2>文件管理</h2>
+<input type="file" id="uploadFile">
+<button onclick="uploadFile()">上传</button>
+<table id="fileTable"></table>
+
+<h2>播放控制</h2>
+<button onclick="sendControl('play')">播放</button>
+<button onclick="sendControl('pause')">暂停</button>
+<button onclick="sendControl('next')">下一帧</button>
+<button onclick="sendControl('prev')">上一帧</button>
+
+<script src="main.js"></script>
+</body>
+</html>
