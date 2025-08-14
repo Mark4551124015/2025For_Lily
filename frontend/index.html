@@ -1,30 +1,358 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<title>电子相框控制台</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>SlowMovie 控制面板</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f3f3f3;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { text-align: center; }
+        .status {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        .status-item { margin: 8px 0; }
+        #progressBar {
+            width: 100%;
+            height: 20px;
+            background: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #progressFill {
+            height: 100%;
+            background: #4caf50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .controls {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .controls button {
+            padding: 8px 16px;
+            margin: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        table {
+            background: #fff;
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        th { background: #f0f0f0; }
+        tr:hover { background: #fafafa; }
+        .temp-hot { color: red; font-weight: bold; }
+        .temp-normal { color: green; font-weight: bold; }
+    </style>
 </head>
 <body>
-<h1>电子相框控制台</h1>
+    <h1>SlowMovie 控制面板</h1>
 
-<div id="status">
-  <p>当前文件: <span id="currentFile">-</span></p>
-  <p>进度: <span id="progress">0%</span></p>
-  <p>温度: <span id="temperature">0°C</span></p>
-</div>
+    <div class="status">
+        <div class="status-item">当前文件：<span id="currentFile">-</span></div>
+        <div class="status-item">
+            进度：<span id="progress">0%</span> 
+            <span id="timeDisplay">(00:00 / 00:00)</span> <!-- 新增时间显示 -->
 
-<h2>文件管理</h2>
-<input type="file" id="uploadFile">
-<button onclick="uploadFile()">上传</button>
-<table id="fileTable"></table>
+            <div id="progressBar">
+                <div id="progressFill"></div>
+            </div>
+        </div>
+        <div class="status-item">
+            帧：
+            <input type="number" id="frameInput" min="0" style="width:80px;">
+            / <span id="totalFrames">0</span>
+            <span id="sliderTime">00:00</span> <!-- 拖动时显示时间 -->
+            
+            <input type="range" id="frameSlider" min="0" max="0" value="0" style="width:100%;" 
+                oninput="onSliderChange(this.value)">
+            <button onclick="jumpToFrame()">跳转</button>
+        </div>
+        <div class="status-item">
+            状态：<span id="playState">-</span>
+        </div>
 
-<h2>播放控制</h2>
-<button onclick="sendControl('play')">播放</button>
-<button onclick="sendControl('pause')">暂停</button>
-<button onclick="sendControl('next')">下一帧</button>
-<button onclick="sendControl('prev')">上一帧</button>
+        <div class="status-item">
+            温度：<span id="temperature" class="temp-normal">- °C</span>
+        </div>
+    </div>
 
-<script src="main.js"></script>
+    <div class="controls">
+        <h3>控制</h3>
+        <button onclick="sendControl('pause')">暂停</button>
+        <button onclick="sendControl('resume')">继续</button>
+        <button onclick="sendControl('prev')">上一帧</button>
+        <button onclick="sendControl('next')">下一帧</button>
+    </div>
+
+    <div class="controls">
+        <h3>播放配置</h3>
+        <label>延迟(ms)：<input type="number" id="cfgDelay" min="0"></label><br>
+        <label>增量帧数：<input type="number" id="cfgIncrement" min="1"></label><br>
+        <label>循环播放：<input type="checkbox" id="cfgLoop"></label><br>
+        <label>随机播放：<input type="checkbox" id="cfgRandom"></label><br>
+        <!-- <label>当前文件：
+            <select id="cfgFile"></select>
+        </label> -->
+        <br>
+        <button onclick="saveConfig()">保存配置</button>
+    </div>
+
+
+    <div class="controls">
+        <h3>上传视频</h3>
+        <input type="file" id="uploadFile">
+        <button onclick="uploadFile()">上传</button>
+        <div style="margin-top:10px;">
+            <div id="uploadProgress" style="width:100%; background:#ddd; height:20px; border-radius:10px; overflow:hidden;">
+                <div id="uploadProgressFill" style="height:100%; width:0%; background:#4caf50; transition:width 0.2s;"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <h3>文件列表</h3>
+    <table id="fileTable">
+        <thead>
+            <tr>
+                <th>文件名</th>
+                <th>操作</th>
+                <th>播放</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+<script>
+let sliderInitialized = false; 
+let inputInitialized = false;  
+let fps = 25; 
+let isPaused = true; // 播放状态缓存
+let currentPlayingFile = ""; // 当前播放文件
+
+function formatTime(seconds) {
+    let h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    let m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    let s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+}
+
+async function loadConfig() {
+    let res = await fetch('/api/config');
+    let cfg = await res.json();
+
+    document.getElementById('cfgDelay').value = cfg.delay;
+    document.getElementById('cfgIncrement').value = cfg.increment;
+    document.getElementById('cfgLoop').checked = cfg.loop;
+    document.getElementById('cfgRandom').checked = cfg.random;
+
+    // 填充文件下拉框
+    let fileSelect = document.getElementById('cfgFile');
+    let filesRes = await fetch('/api/files');
+    let filesData = await filesRes.json();
+
+}
+
+async function saveConfig() {
+    let cfg = {
+        delay: parseInt(document.getElementById('cfgDelay').value) || 0,
+        increment: parseInt(document.getElementById('cfgIncrement').value) || 1,
+        loop: document.getElementById('cfgLoop').checked,
+        random: document.getElementById('cfgRandom').checked,
+    };
+
+    await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(cfg)
+    });
+
+    alert("配置已保存");
+    listFiles();
+}
+
+
+async function getStatus() {
+    let res = await fetch('/api/status');
+    let data = await res.json();
+
+    document.getElementById('currentFile').innerText = data.file || '-';
+    let percentNum = (data.percent || 0);
+    document.getElementById('progress').innerText =
+        `${data.frame}/${data.total_frames} (${percentNum.toFixed(1)}%)`;
+    document.getElementById('progressFill').style.width = percentNum.toFixed(1) + '%';
+
+    document.getElementById('totalFrames').innerText = data.total_frames || 0;
+
+    // 保存 fps
+    if (data.fps && data.fps > 0) fps = data.fps;
+
+    // 更新播放状态
+    isPaused = !!data.paused;
+    document.getElementById('playState').innerText = isPaused ? '暂停' : '播放中';
+
+    // 已播放时间 / 剩余时间
+    document.getElementById('timeDisplay').innerText =
+        `(${data.elapsed || "00:00:00"} / ${data.remaining || "00:00:00"})`;
+
+    if (!inputInitialized) {
+        document.getElementById('frameInput').value = data.frame || 0;
+        document.getElementById('sliderTime').innerText = data.elapsed || "00:00:00";
+        inputInitialized = true;
+    }
+
+    if (!sliderInitialized) {
+        document.getElementById('frameSlider').max = data.total_frames || 0;
+        document.getElementById('frameSlider').value = data.frame || 0;
+        sliderInitialized = true;
+    }
+
+    let tempEl = document.getElementById('temperature');
+    tempEl.innerText = (data.temperature || 0).toFixed(1) + '°C';
+    tempEl.className = data.temperature > 60 ? 'temp-hot' : 'temp-normal';
+}
+
+function onSliderChange(val) {
+    document.getElementById('frameInput').value = val;
+    document.getElementById('sliderTime').innerText = formatTime(val / fps);
+}
+
+async function jumpToFrame() {
+    let frame = parseInt(document.getElementById('frameInput').value) || 0;
+    await fetch('/api/control/seek', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ frame })
+    });
+}
+
+async function listFiles() {
+    // 先获取当前播放文件
+    let cfgRes = await fetch('/api/config');
+    let cfgData = await cfgRes.json();
+    currentPlayingFile = cfgData.file || "";
+
+    console.log("当前播放文件:", currentPlayingFile);
+    
+
+    // 获取文件列表
+    let res = await fetch('/api/files');
+    let data = await res.json();
+    let tableBody = document.getElementById('fileTable').querySelector('tbody');
+    tableBody.innerHTML = '';
+    data.files.forEach(f => {
+        let row = tableBody.insertRow();
+        row.insertCell(0).innerText = f.name;
+
+        let delCell = row.insertCell(1);
+        let delBtn = document.createElement('button');
+        if (f.name === currentPlayingFile) {
+            delBtn.innerText = '播放中';
+            delBtn.disabled = true;
+        } else {
+            delBtn.innerText = '删除';
+            delBtn.onclick = () => deleteFile(f.name);
+        }
+        delCell.appendChild(delBtn);
+
+        let playCell = row.insertCell(2);
+        let playBtn = document.createElement('button');
+        playBtn.innerText = '播放';
+        playBtn.onclick = () => selectFile(f.name);
+        playCell.appendChild(playBtn);
+    });
+}
+
+function uploadFile() {
+    let fileInput = document.getElementById('uploadFile');
+    let file = fileInput.files[0];
+    if (!file) {
+        alert("请选择文件");
+        return;
+    }
+    if (file.size > 1024 * 1024 * 1024) { // 1GB
+        alert("文件大小不能超过 1GB");
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append('video', file);
+
+    let xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload', true);
+
+    // 上传进度
+    xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+            let percent = (e.loaded / e.total) * 100;
+            document.getElementById('uploadProgressFill').style.width = percent + '%';
+        }
+    };
+
+    xhr.onload = function () {
+        if (xhr.status === 200) {
+            alert('上传完成');
+            document.getElementById('uploadProgressFill').style.width = '0%';
+            listFiles();
+        } else {
+            alert('上传失败：' + xhr.responseText);
+        }
+    };
+
+    xhr.send(formData);
+}
+
+async function deleteFile(name) {
+    await fetch('/api/files/' + encodeURIComponent(name), { method: 'DELETE' });
+    listFiles();
+}
+
+async function selectFile(name) {
+    await fetch('/api/control/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name }) // 与后端 FileSelectRequest 匹配
+    });
+    listFiles();
+}
+
+async function sendControl(cmd) {
+    await fetch('/api/control/' + cmd, { method: 'POST' });
+}
+
+async function init() {
+    await getStatus(); // 等待获取状态完成
+    await listFiles(); // 再刷新文件列表
+
+}
+
+
+loadConfig();
+init();
+setInterval(async () => {
+    await getStatus();
+    await listFiles();
+}, 2000);
+</script>
+
+
+
 </body>
 </html>
