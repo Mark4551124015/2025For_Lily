@@ -3,13 +3,13 @@
 
 import os, sys, time, json, random
 from PIL import Image
-# from omni_epd import displayfactory, EPDNotFoundError
 import ffmpeg
+import signal
 
 # ==== 路径配置 ====
-VIDEO_DIR     = "/home/pi/framebox/backend/videos"
-CONFIG_FILE   = "/home/pi/framebox/backend/config.json"
-PROGRESS_FILE = "/home/pi/framebox/backend/progress.json"
+# VIDEO_DIR     = "/home/pi/framebox/backend/videos"
+# CONFIG_FILE   = "/home/pi/framebox/backend/config.json"
+# PROGRESS_FILE = "/home/pi/framebox/backend/progress.json"
 STATUS_FILE   = "/tmp/slowmovie_status.json"
 CMD_FILE      = "/tmp/slowmovie_cmd"
 SEEK_FILE     = "/tmp/slowmovie_seek"
@@ -28,6 +28,21 @@ current_video = ""
 current_frame = 0
 total_frames = 0
 fps = 24.0
+
+
+use_epd = True
+try:
+    from omni_epd import displayfactory, EPDNotFoundError
+    epd = displayfactory.load_display_driver()
+    width, height = epd.width, epd.height
+except Exception:
+    print("No EPD found, using direct image display mode")
+    use_epd = False
+    epd = None
+    width, height = 720, 480  # 调试分辨率
+
+
+
 
 # ==== 工具函数 ====
 def get_cpu_temp():
@@ -206,28 +221,21 @@ probe_video(current_video)
 progress_map = load_progress()
 current_frame = progress_map.get(os.path.basename(current_video), 0)
 
-# # 初始化 e-Paper
-# use_epd = True
-# try:
-#     epd = displayfactory.load_display_driver()
-#     width, height = epd.width, epd.height
-# except EPDNotFoundError:
-#     print("No EPD found, using direct image display mode")
-#     use_epd = False
-#     epd = None
-#     # 你可以自定义调试时的分辨率
-#     width, height = 800, 480
 
-use_epd = True
-try:
-    from omni_epd import displayfactory, EPDNotFoundError
-    epd = displayfactory.load_display_driver()
-    width, height = epd.width, epd.height
-except Exception:
-    print("No EPD found, using direct image display mode")
-    use_epd = False
-    epd = None
-    width, height = 720, 480  # 调试分辨率
+def exithandler(signum, frame):
+    epd.prepare()
+    epd.clear()
+    try:
+        epd.close()
+    finally:
+        sys.exit()
+
+
+# Add hooks for interrupt signal
+signal.signal(signal.SIGTERM, exithandler)
+signal.signal(signal.SIGINT, exithandler)
+
+
 
 
 # ==== 主循环 ====
