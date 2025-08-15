@@ -221,8 +221,8 @@ def extract_frame_picture(video_path, frame_time, out_path):
 def extract_frame(video_path, frame_time, out_path):
     (
         ffmpeg
-        .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
-        # .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
+        # .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
+        .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
         .filter("scale", width, height, force_original_aspect_ratio=1)
         .filter("format", "gray")  # 如需灰度可取消注释
         .output(out_path, vframes=1, pix_fmt="rgb24")
@@ -286,9 +286,9 @@ while True:
     frame_time_sec = current_frame / fps if fps else 0
     tmp_frame = "/dev/shm/frame.bmp"
     if use_epd:
-        extract_frame_picture(current_video, frame_time_sec, tmp_frame)
+        extract_frame(current_video, frame_time_sec, tmp_frame)
+        # extract_frame_picture(current_video, frame_time_sec, tmp_frame)
     else:
-
         extract_frame(current_video, frame_time_sec, tmp_frame)
 
     img = Image.open(tmp_frame)
