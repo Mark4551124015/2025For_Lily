@@ -114,7 +114,6 @@ def save_status():
     }
     with open(STATUS_FILE, "w") as f:
         json.dump(status, f)
-    save_progress(current_video, current_frame)
 
 
 def handle_seek():
@@ -131,7 +130,6 @@ def handle_seek():
             # 限制范围
             current_frame = max(0, min(frame_val, total_frames - 1))
             print(f"[SEEK] 跳转到帧 {current_frame}/{total_frames}")
-            save_progress(current_video, current_frame)
         else:
             print(f"[SEEK] 无效的帧号: {frame_str}")
     except Exception as e:
@@ -219,6 +217,7 @@ def extract_frame(video_path, frame_time, out_path):
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
+        save_progress(os.path.basename(video_path), current_frame)
     except ffmpeg.Error as e:
         print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
         print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
