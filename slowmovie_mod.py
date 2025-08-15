@@ -37,6 +37,7 @@ try:
     from omni_epd import displayfactory, EPDNotFoundError
     epd = displayfactory.load_display_driver(DRIVER)
     width, height = epd.width, epd.height
+
 except Exception:
     print("No EPD found, using direct image display mode")
     use_epd = False
@@ -44,7 +45,7 @@ except Exception:
     width, height = 800, 480  # 调试分辨率
 
 
-
+print(f"Using display: {DRIVER}, resolution: {width}x{height}")
 
 # ==== 工具函数 ====
 def get_cpu_temp():
@@ -205,6 +206,7 @@ def extract_frame(video_path, frame_time, out_path):
             # .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
             .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
             .filter("scale", width, height, force_original_aspect_ratio=1)
+            .filter("pad", width, height, -1, -1)
             # .filter("format", "gray")  # 如需灰度可取消注释
             .output(out_path, vframes=1, pix_fmt="rgb24")
             .overwrite_output()
