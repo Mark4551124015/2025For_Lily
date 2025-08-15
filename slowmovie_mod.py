@@ -198,11 +198,31 @@ def probe_video(video_path):
         print("Probe error:", e)
         total_frames, fps = 1000, 24.0
 
+def extract_frame_picture(video_path, frame_time, out_path):
+    """
+    提取指定时间点的帧图片
+    :param video_path: 视频文件路径
+    :param frame_time: 帧时间点（秒）
+    :param out_path: 输出图片路径
+    """
+    (
+        ffmpeg
+        .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
+        .filter("scale", "iw*sar", "ih")
+        .fullscreen_filter()
+        .filter("scale", width, height, force_original_aspect_ratio=1)
+        .filter("pad", width, height, -1, -1)
+        .overlay_filter()
+        .output(out_path, vframes=1, pix_fmt="rgb24")
+        .overwrite_output()
+        .run(capture_stdout=True, capture_stderr=True)
+    )
+
 def extract_frame(video_path, frame_time, out_path):
     (
         ffmpeg
-        # .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
-        .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
+        .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
+        # .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
         .filter("scale", width, height, force_original_aspect_ratio=1)
         .filter("format", "gray")  # 如需灰度可取消注释
         .output(out_path, vframes=1, pix_fmt="rgb24")
@@ -244,7 +264,11 @@ signal.signal(signal.SIGINT, exithandler)
 while True:
     frame_time_sec = current_frame / fps if fps else 0
     tmp_frame = "/dev/shm/frame.bmp"
-    extract_frame(current_video, frame_time_sec, tmp_frame)
+    if use_epd:
+        extract_frame_picture(current_video, frame_time_sec, tmp_frame)
+    else:
+
+        extract_frame(current_video, frame_time_sec, tmp_frame)
 
     img = Image.open(tmp_frame)
     if use_epd:
