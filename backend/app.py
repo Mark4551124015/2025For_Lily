@@ -155,7 +155,12 @@ def update_config(cfg: ConfigData):
     loop_mode = cfg.loop
     random_mode = cfg.random
     # current_video = os.path.join(VIDEO_DIR, cfg.file) if cfg.file else ""
-
+    cfg = {
+        "delay": delay,
+        "increment": increment,
+        "loop": loop_mode,
+        "random": random_mode
+    }
     cfg["file"] = os.path.basename(current_video) if current_video else ""
     print("Updating config:", cfg)
     save_config(cfg)
