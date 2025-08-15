@@ -228,6 +228,7 @@ if __name__ == "__main__":
     while True:
         frame_time_sec = current_frame / fps if fps else 0
         tmp_frame = "/dev/shm/frame.bmp"
+        tmp_frame_e = "/dev/shm/frame_edited.bmp"
         start = time.time()
         extract_frame(current_video, frame_time_sec, tmp_frame)
         extracted_time = time.time()
@@ -235,6 +236,7 @@ if __name__ == "__main__":
         img = Image.open(tmp_frame).convert('L')
         # img_dithered = bayer_dither_4levels(img, levels=4)
         img_dithered = dither_fs_4gray_hw(img)
+        img_dithered.save(tmp_frame_e)
         finish_time = time.time()
 
 

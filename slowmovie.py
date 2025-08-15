@@ -2,23 +2,18 @@
 # -*- coding:utf-8 -*-
 
 import os, sys, time, json, random
+import numpy as np
 from PIL import Image
 import ffmpeg
-import signal
+from tools import *
+from loguru import logger
+from waveshare_epd import epd7in5_V2 as epd_driver
+import time
 
 # ==== 路径配置 ====
-# VIDEO_DIR     = "/home/pi/framebox/backend/videos"
-# CONFIG_FILE   = "/home/pi/framebox/backend/config.json"
-# PROGRESS_FILE = "/home/pi/framebox/backend/progress.json"
-# STATUS_FILE   = "/tmp/slowmovie_status.json"
-# CMD_FILE      = "/tmp/slowmovie_cmd"
-# SEEK_FILE     = "/tmp/slowmovie_seek"
-
-
 STATUS_FILE   = "/dev/shm/slowmovie_status.json"
 CMD_FILE      = "/dev/shm/slowmovie_cmd"
 SEEK_FILE     = "/dev/shm/slowmovie_seek"
-
 
 VIDEO_DIR     = "./backend/videos"
 CONFIG_FILE   = "./backend/config.json"
@@ -39,63 +34,11 @@ fps = 24.0
 
 
 
-from waveshare_epd import epd7in5_V2 as epd_driver
 # import epaper 
 epd = epd_driver.EPD()
 epd.init_4Gray()
 width, height = epd.width, epd.height
-print(f"Using display: {DRIVER}, resolution: {width}x{height}")
-
-
-import numpy as np
-import numpy as np
-from PIL import Image
-
-def floyd_steinberg_4levels(img, levels=4):
-    """加速版 Floyd–Steinberg 4阶灰度抖动"""
-    arr = np.array(img.convert("L"), dtype=np.float32)
-    h, w = arr.shape
-    palette = np.linspace(0, 255, levels)
-
-    for y in range(h):
-        for x in range(w):
-            old = arr[y, x]
-            new = palette[np.argmin(np.abs(palette - old))]
-            arr[y, x] = new
-            err = old - new
-            if x+1 < w: arr[y, x+1] += err * 7/16
-            if y+1 < h:
-                if x > 0: arr[y+1, x-1] += err * 3/16
-                arr[y+1, x] += err * 5/16
-                if x+1 < w: arr[y+1, x+1] += err * 1/16
-
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-
-
-def bayer_dither_4levels(img, levels=4):
-    """快速Bayer有序抖动到4阶灰度"""
-    bayer8 = (1/64.0) * np.array([
-        [0, 48, 12, 60, 3, 51, 15, 63],
-        [32, 16, 44, 28, 35, 19, 47, 31],
-        [8, 56, 4, 52, 11, 59, 7, 55],
-        [40, 24, 36, 20, 43, 27, 39, 23],
-        [2, 50, 14, 62, 1, 49, 13, 61],
-        [34, 18, 46, 30, 33, 17, 45, 29],
-        [10, 58, 6, 54, 9, 57, 5, 53],
-        [42, 26, 38, 22, 41, 25, 37, 21]
-    ], dtype=np.float32)
-
-    arr = np.array(img.convert("L"), dtype=np.float32) / 255.0
-    h, w = arr.shape
-    tile = np.tile(bayer8, (h // 8 + 1, w // 8 + 1))[:h, :w]
-
-    # 偏移+量化到levels阶
-    arr = np.clip(arr + (tile - 0.5) / levels, 0, 1)
-    arr = np.round(arr * (levels - 1)) * (255 / (levels - 1))
-    print("Dither Done!")
-
-    return Image.fromarray(arr.astype(np.uint8))
-
+logger.info(f"Using display: {DRIVER}, resolution: {width}x{height}")
 
 
 # ==== 工具函数 ====
@@ -174,11 +117,11 @@ def handle_seek():
             frame_val = int(frame_str)
             # 限制范围
             current_frame = max(0, min(frame_val, total_frames - 1))
-            print(f"[SEEK] 跳转到帧 {current_frame}/{total_frames}")
+            logger.info(f"[SEEK] 跳转到帧 {current_frame}/{total_frames}")
         else:
-            print(f"[SEEK] 无效的帧号: {frame_str}")
+            logger.warn(f"[SEEK] 无效的帧号: {frame_str}")
     except Exception as e:
-        print(f"[SEEK] 处理失败: {e}")
+        logger.error(f"[SEEK] 处理失败: {e}")
     finally:
         try:
             # os.remove(SEEK_FILE)
@@ -196,7 +139,7 @@ def handle_command():
         cmd = f.read().strip()
     if not cmd:
         return False
-    print("Received command:", cmd)
+    logger.info(f"[Handler] Received command: <{cmd}>")
     executed = True
     if cmd == "pause":
         paused = True
@@ -228,11 +171,11 @@ def handle_command():
         probe_video(current_video)
     elif cmd == "seek":
         if not handle_seek():
-            print("No valid seek command found")
+            logger.error("[Seeker] No valid seek command found")
         else:
-            print("Seeked")
+            logger.info("[Seeker] Seeked")
     else:
-        print(f"Unknown command: {cmd}")
+        logger.warn(f"Unknown command: {cmd}")
         executed = False
     os.remove(CMD_FILE)
     return executed
@@ -246,7 +189,7 @@ def probe_video(video_path):
         fps = eval(fps_str) if fps_str != "0/0" else 24.0
         total_frames = int(stream.get('nb_frames') or int(float(probe['format']['duration']) * fps))
     except Exception as e:
-        print("Probe error:", e)
+        logger.error("Probe error:", e)
         total_frames, fps = 1000, 24.0
 
 def extract_frame(video_path, frame_time, out_path):
@@ -264,68 +207,80 @@ def extract_frame(video_path, frame_time, out_path):
         )
         save_progress(os.path.basename(video_path), current_frame)
     except ffmpeg.Error as e:
-        print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
-        print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
+        logger.error("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
+        logger.error("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
         raise
 
+if __name__ == "__main__":
+    # ==== 初始化 ====
+    videos = list_videos()
 
-# ==== 初始化 ====
-videos = list_videos()
-if not videos:
-    print("No videos found in", VIDEO_DIR)
-    sys.exit(1)
+    current_video = os.path.join(VIDEO_DIR, videos[0])
+    load_config()
+    probe_video(current_video)
 
-current_video = os.path.join(VIDEO_DIR, videos[0])
-load_config()
-probe_video(current_video)
-
-progress_map = load_progress()
-current_frame = progress_map.get(os.path.basename(current_video), 0)
+    progress_map = load_progress()
+    current_frame = progress_map.get(os.path.basename(current_video), 0)
 
 
 
-# ==== 主循环 ====
-while True:
-    frame_time_sec = current_frame / fps if fps else 0
-    tmp_frame = "/dev/shm/frame.bmp"
-    extract_frame(current_video, frame_time_sec, tmp_frame)
-
-    img = Image.open(tmp_frame).convert('L')
-    # img_dithered = bayer_dither_4levels(img, levels=4)
-    img_dithered = floyd_steinberg_4levels(img, levels=4)
-
-
-    epd.init_4Gray()
-    # epd.display(img)
-    # epd.display(epd.getbuffer(pil_im))
-    epd.display_4Gray(epd.getbuffer_4Gray(img_dithered))
-    epd.sleep()
-
-    current_frame += increment
-    if current_frame >= total_frames:
-        if loop_mode:
-            current_frame = 0
-        elif random_mode:
-            current_video = os.path.join(VIDEO_DIR, random.choice(videos))
-            probe_video(current_video)
-            current_frame = load_progress().get(os.path.basename(current_video), 0)
-        else:
-            idx = videos.index(os.path.basename(current_video))
-            idx = (idx + 1) % len(videos)
-            current_video = os.path.join(VIDEO_DIR, videos[idx])
-            probe_video(current_video)
-            current_frame = load_progress().get(os.path.basename(current_video), 0)
-
-    sleep_step = 0.5  # 每 0.5 秒检查一次
-    slept = 0
-    print("Sleep for", delay, "seconds")
-    while slept < delay:
-        time.sleep(sleep_step)
-        if not paused:
-            slept += sleep_step
-
-        executed = handle_command()
+    # ==== 主循环 ====
+    while True:
+        frame_time_sec = current_frame / fps if fps else 0
+        tmp_frame = "/dev/shm/frame.bmp"
+        tmp_frame_e = "/dev/shm/frame_edited.bmp"
+        start = time.time()
+        extract_frame(current_video, frame_time_sec, tmp_frame)
+        extracted_time = time.time()
         
-        save_status()
-        if executed:
-            break
+        img = Image.open(tmp_frame).convert('L')
+        # img_dithered = bayer_dither_4levels(img, levels=4)
+        img_dithered = dither_fs_4gray_hw(img)
+        img_dithered.save(tmp_frame_e)
+        finish_time = time.time()
+
+
+        epd.init_4Gray()
+        # epd.display(img)
+        # epd.display(epd.getbuffer(pil_im))
+        epd.display_4Gray(epd.getbuffer_4Gray(img_dithered))
+        epd.sleep()
+
+        flashed_time = time.time()
+
+        logger.info(
+            f"Frame {current_frame}/{total_frames} | "
+            f"FFmpeg: {(extracted_time - start)*1000:.1f} ms | "
+            f"Dither: {(finish_time - extracted_time)*1000:.1f} ms | "
+            f"E-Paper: {(flashed_time - finish_time):.2f} s | "
+            f"Total: {(flashed_time - start):.2f} s"
+        )
+
+
+        current_frame += increment
+        if current_frame >= total_frames:
+            if loop_mode:
+                current_frame = 0
+            elif random_mode:
+                current_video = os.path.join(VIDEO_DIR, random.choice(videos))
+                probe_video(current_video)
+                current_frame = load_progress().get(os.path.basename(current_video), 0)
+            else:
+                idx = videos.index(os.path.basename(current_video))
+                idx = (idx + 1) % len(videos)
+                current_video = os.path.join(VIDEO_DIR, videos[idx])
+                probe_video(current_video)
+                current_frame = load_progress().get(os.path.basename(current_video), 0)
+
+        sleep_step = 0.5  # 每 0.5 秒检查一次
+        slept = 0
+        while slept < delay:
+            time.sleep(sleep_step)
+            if not paused:
+                slept += sleep_step
+
+            executed = handle_command()
+            
+            save_status()
+            if executed:
+                break

@@ -1,6 +1,7 @@
 from PIL import Image
 import numpy as np
 from numba import njit
+import cv2  # CLAHE 需要 OpenCV
 
 # 电子纸 4 阶灰度硬件值
 GRAY_LEVELS = np.array([0xFF, 0xC0, 0x80, 0x00], dtype=np.float32)
@@ -26,21 +27,22 @@ def floyd_steinberg_4gray_hw(arr, palette):
     return arr
 
 def dither_fs_4gray_hw(img):
-    """自适应亮度 + Gamma 校正 + FS 4 阶灰度抖动"""
-    arr = np.array(img.convert("L"), dtype=np.float32)
+    """CLAHE + 自适应 Gamma + Floyd–Steinberg 抖动"""
+    # 转灰度
+    arr = np.array(img.convert("L"), dtype=np.uint8)
 
-    # === Step 1: 归一化到 0-255 ===
-    min_v, max_v = arr.min(), arr.max()
-    if max_v > min_v:
-        arr = (arr - min_v) * (255.0 / (max_v - min_v))
+    # Step 1: CLAHE 提升局部对比度
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    arr = clahe.apply(arr)
 
-    # === Step 2: 判断是否偏暗，自动抬亮 ===
-    mean_val = arr.mean()
-    if mean_val < 128:  # 偏暗图
-        gamma = max(0.35, mean_val / 128)  # 平均值越低，gamma 越小，越亮
-        arr = np.power(arr / 255.0, gamma) * 255.0
+    # Step 2: 自适应 Gamma 提亮暗部
+    arr_f = arr.astype(np.float32)
+    mean_val = arr_f.mean()
+    if mean_val < 150:  # 画面偏暗时才提亮
+        gamma = 0.35 + 0.65 * (mean_val / 150)
+        arr_f = np.power(arr_f / 255.0, gamma) * 255.0
 
-    # === Step 3: FS 抖动 ===
-    arr = floyd_steinberg_4gray_hw(arr, GRAY_LEVELS)
+    # Step 3: Floyd–Steinberg 抖动到电子纸灰阶
+    arr_f = floyd_steinberg_4gray_hw(arr_f, GRAY_LEVELS)
 
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+    return Image.fromarray(np.clip(arr_f, 0, 255).astype(np.uint8))
