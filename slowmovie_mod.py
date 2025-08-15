@@ -205,7 +205,7 @@ def extract_frame(video_path, frame_time, out_path):
             # .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
             .input(video_path, ss=frame_time)  # 硬件解码（Pi 上可用）
             .filter("scale", width, height, force_original_aspect_ratio=1)
-            .filter("format", "gray")  # 如需灰度可取消注释
+            # .filter("format", "gray")  # 如需灰度可取消注释
             .output(out_path, vframes=1, pix_fmt="rgb24")
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
