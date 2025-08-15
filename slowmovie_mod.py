@@ -208,7 +208,7 @@ def extract_frame(video_path, frame_time, out_path):
             .filter("scale", width, height, force_original_aspect_ratio=1)
             .filter("pad", width, height, -1, -1)
             # .filter("format", "gray")  # 如需灰度可取消注释
-            .output(out_path, vframes=1, pix_fmt="rgb24")
+            .output(out_path, vframes=1, copyts=None)
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
