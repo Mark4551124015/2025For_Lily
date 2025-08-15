@@ -38,20 +38,65 @@ total_frames = 0
 fps = 24.0
 
 
-use_epd = True
-try:
-    from omni_epd import displayfactory, EPDNotFoundError
-    epd = displayfactory.load_display_driver(DRIVER)
-    width, height = epd.width, epd.height
 
-except Exception:
-    print("No EPD found, using direct image display mode")
-    use_epd = False
-    epd = None
-    width, height = 800, 480  # 调试分辨率
-
-
+from waveshare_epd import epd7in5_V2 as epd_driver
+# import epaper 
+epd = epd_driver.EPD()
+epd.init_4Gray()
+width, height = epd.width, epd.height
 print(f"Using display: {DRIVER}, resolution: {width}x{height}")
+
+
+import numpy as np
+import numpy as np
+from PIL import Image
+
+def floyd_steinberg_4levels(img, levels=4):
+    """加速版 Floyd–Steinberg 4阶灰度抖动"""
+    arr = np.array(img.convert("L"), dtype=np.float32)
+    h, w = arr.shape
+    palette = np.linspace(0, 255, levels)
+
+    for y in range(h):
+        for x in range(w):
+            old = arr[y, x]
+            new = palette[np.argmin(np.abs(palette - old))]
+            arr[y, x] = new
+            err = old - new
+            if x+1 < w: arr[y, x+1] += err * 7/16
+            if y+1 < h:
+                if x > 0: arr[y+1, x-1] += err * 3/16
+                arr[y+1, x] += err * 5/16
+                if x+1 < w: arr[y+1, x+1] += err * 1/16
+
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+
+
+def bayer_dither_4levels(img, levels=4):
+    """快速Bayer有序抖动到4阶灰度"""
+    bayer8 = (1/64.0) * np.array([
+        [0, 48, 12, 60, 3, 51, 15, 63],
+        [32, 16, 44, 28, 35, 19, 47, 31],
+        [8, 56, 4, 52, 11, 59, 7, 55],
+        [40, 24, 36, 20, 43, 27, 39, 23],
+        [2, 50, 14, 62, 1, 49, 13, 61],
+        [34, 18, 46, 30, 33, 17, 45, 29],
+        [10, 58, 6, 54, 9, 57, 5, 53],
+        [42, 26, 38, 22, 41, 25, 37, 21]
+    ], dtype=np.float32)
+
+    arr = np.array(img.convert("L"), dtype=np.float32) / 255.0
+    h, w = arr.shape
+    tile = np.tile(bayer8, (h // 8 + 1, w // 8 + 1))[:h, :w]
+
+    # 偏移+量化到levels阶
+    arr = np.clip(arr + (tile - 0.5) / levels, 0, 1)
+    arr = np.round(arr * (levels - 1)) * (255 / (levels - 1))
+    print("Dither Done!")
+
+    return Image.fromarray(arr.astype(np.uint8))
+
+
 
 # ==== 工具函数 ====
 def get_cpu_temp():
@@ -223,82 +268,6 @@ def extract_frame(video_path, frame_time, out_path):
         print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
         raise
 
-import cv2
-import numpy as np
-
-def extract_frame(video_path, frame_time, out_path):
-    try:
-        tmp_gray = "/dev/shm/tmp_frame_gray.png"
-
-        # Step 1: ffmpeg 抽帧 + 转灰度
-        (
-            ffmpeg
-            .input(video_path, ss=frame_time)
-            .filter("scale", width, height, force_original_aspect_ratio=1)
-            .filter("pad", width, height, -1, -1)
-            .filter("format", "gray")
-            .output(tmp_gray, vframes=1, copyts=None)
-            .overwrite_output()
-            .run(capture_stdout=True, capture_stderr=True)
-        )
-
-        # Step 2: OpenCV 读取灰度帧
-        img = cv2.imread(tmp_gray, cv2.IMREAD_GRAYSCALE)
-
-        # Step 3: 轻度降噪（只去掉孤立点）
-        img = cv2.fastNlMeansDenoising(img, None, h=3, templateWindowSize=7, searchWindowSize=21)
-
-        # Step 4: 局部对比度增强（提细节）
-        # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        # img = clahe.apply(img)
-
-        # # Step 5: 锐化
-        # kernel_sharp = np.array([[0, -1, 0],
-        #                          [-1, 5, -1],
-        #                          [0, -1, 0]])
-        # img = cv2.filter2D(img, -1, kernel_sharp)
-
-        clahe = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(8, 8))
-        img = clahe.apply(img)
-
-        # Step 5: 弱锐化（减少过冲）
-        kernel_sharp = np.array([[0, -0.5, 0],
-                                [-0.5, 3, -0.5],
-                                [0, -0.5, 0]])
-        img = cv2.filter2D(img, -1, kernel_sharp)
-
-
-        # Step 6: 4阶灰度量化（2bit）
-        thresholds = [64, 128, 192]  # 自定义分割阈值
-        img_quant = np.zeros_like(img)
-        img_quant[img < thresholds[0]] = 0
-        img_quant[(img >= thresholds[0]) & (img < thresholds[1])] = 85
-        img_quant[(img >= thresholds[1]) & (img < thresholds[2])] = 170
-        img_quant[img >= thresholds[2]] = 255
-
-        # Step 7: 保存为 BMP
-        cv2.imwrite(out_path, img_quant)
-
-        save_progress(os.path.basename(video_path), current_frame)
-
-    except ffmpeg.Error as e:
-        print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
-        print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
-        raise
-
-# def fullscreen_filter(self):
-
-#     if args.fullscreen:
-#         if videoInfo["aspect_ratio"] > width / height:
-#             return self.filter("crop", f"ih*{width / height}", "ih")
-#         elif videoInfo["aspect_ratio"] < width / height:
-#             return self.filter("crop", "iw", f"iw*{height / width}")
-#     return self
-
-
-# ffmpeg.Stream.overlay_filter = overlay_filter
-# ffmpeg.Stream.fullscreen_filter = fullscreen_filter
-
 
 # ==== 初始化 ====
 videos = list_videos()
@@ -314,39 +283,23 @@ progress_map = load_progress()
 current_frame = progress_map.get(os.path.basename(current_video), 0)
 
 
-def exithandler(signum, frame):
-    epd.prepare()
-    epd.clear()
-    try:
-        epd.close()
-    finally:
-        sys.exit()
-
-if None:
-    # Add hooks for interrupt signal
-    signal.signal(signal.SIGTERM, exithandler)
-    signal.signal(signal.SIGINT, exithandler)
-
-
-
 
 # ==== 主循环 ====
 while True:
     frame_time_sec = current_frame / fps if fps else 0
     tmp_frame = "/dev/shm/frame.bmp"
-    if use_epd:
-        extract_frame(current_video, frame_time_sec, tmp_frame)
-        # extract_frame_picture(current_video, frame_time_sec, tmp_frame)
-    else:
-        extract_frame(current_video, frame_time_sec, tmp_frame)
+    extract_frame(current_video, frame_time_sec, tmp_frame)
 
-    img = Image.open(tmp_frame)
-    if use_epd:
-        epd.prepare()
-        epd.display(img)
-        epd.sleep()
-    else:
-        img.show()  # 调试模式直接弹出图片
+    img = Image.open(tmp_frame).convert('L')
+    # img_dithered = bayer_dither_4levels(img, levels=4)
+    img_dithered = floyd_steinberg_4levels(img, levels=4)
+
+
+    epd.init_4Gray()
+    # epd.display(img)
+    # epd.display(epd.getbuffer(pil_im))
+    epd.display_4Gray(epd.getbuffer_4Gray(img_dithered))
+    epd.sleep()
 
     current_frame += increment
     if current_frame >= total_frames:
@@ -363,7 +316,6 @@ while True:
             probe_video(current_video)
             current_frame = load_progress().get(os.path.basename(current_video), 0)
 
-    # time.sleep(delay)
     sleep_step = 0.5  # 每 0.5 秒检查一次
     slept = 0
     print("Sleep for", delay, "seconds")
