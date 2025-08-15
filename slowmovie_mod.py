@@ -299,6 +299,7 @@ while True:
     # time.sleep(delay)
     sleep_step = 0.5  # 每 0.5 秒检查一次
     slept = 0
+    print("Sleep for", delay, "seconds")
     while slept < delay:
         time.sleep(sleep_step)
         if not paused:
