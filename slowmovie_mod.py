@@ -255,10 +255,10 @@ def exithandler(signum, frame):
     finally:
         sys.exit()
 
-
-# Add hooks for interrupt signal
-signal.signal(signal.SIGTERM, exithandler)
-signal.signal(signal.SIGINT, exithandler)
+if None:
+    # Add hooks for interrupt signal
+    signal.signal(signal.SIGTERM, exithandler)
+    signal.signal(signal.SIGINT, exithandler)
 
 
 
