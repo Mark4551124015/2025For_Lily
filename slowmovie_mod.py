@@ -18,6 +18,8 @@ VIDEO_DIR     = "./backend/videos"
 CONFIG_FILE   = "./backend/config.json"
 PROGRESS_FILE = "./backend/progress.json"
 
+DRIVER = " waveshare_epd.epd7in5_V2"
+
 # ==== 默认播放参数 ====
 delay        = 60
 increment    = 4
@@ -33,7 +35,7 @@ fps = 24.0
 use_epd = True
 try:
     from omni_epd import displayfactory, EPDNotFoundError
-    epd = displayfactory.load_display_driver()
+    epd = displayfactory.load_display_driver(DRIVER)
     width, height = epd.width, epd.height
 except Exception:
     print("No EPD found, using direct image display mode")
