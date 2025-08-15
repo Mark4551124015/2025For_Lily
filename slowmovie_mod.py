@@ -18,7 +18,7 @@ VIDEO_DIR     = "./backend/videos"
 CONFIG_FILE   = "./backend/config.json"
 PROGRESS_FILE = "./backend/progress.json"
 
-DRIVER = " waveshare_epd.epd7in5_V2"
+DRIVER = "waveshare_epd.epd7in5_V2"
 
 # ==== 默认播放参数 ====
 delay        = 60
