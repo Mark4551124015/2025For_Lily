@@ -223,7 +223,68 @@ def extract_frame(video_path, frame_time, out_path):
         print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
         raise
 
+import cv2
+import numpy as np
 
+def extract_frame(video_path, frame_time, out_path):
+    try:
+        tmp_gray = "/dev/shm/tmp_frame_gray.png"
+
+        # Step 1: ffmpeg 抽帧 + 转灰度
+        (
+            ffmpeg
+            .input(video_path, ss=frame_time)
+            .filter("scale", width, height, force_original_aspect_ratio=1)
+            .filter("pad", width, height, -1, -1)
+            .filter("format", "gray")
+            .output(tmp_gray, vframes=1, copyts=None)
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+
+        # Step 2: OpenCV 读取灰度帧
+        img = cv2.imread(tmp_gray, cv2.IMREAD_GRAYSCALE)
+
+        # Step 3: 轻度降噪（只去掉孤立点）
+        img = cv2.fastNlMeansDenoising(img, None, h=3, templateWindowSize=7, searchWindowSize=21)
+
+        # Step 4: 局部对比度增强（提细节）
+        # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # img = clahe.apply(img)
+
+        # # Step 5: 锐化
+        # kernel_sharp = np.array([[0, -1, 0],
+        #                          [-1, 5, -1],
+        #                          [0, -1, 0]])
+        # img = cv2.filter2D(img, -1, kernel_sharp)
+
+        clahe = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(8, 8))
+        img = clahe.apply(img)
+
+        # Step 5: 弱锐化（减少过冲）
+        kernel_sharp = np.array([[0, -0.5, 0],
+                                [-0.5, 3, -0.5],
+                                [0, -0.5, 0]])
+        img = cv2.filter2D(img, -1, kernel_sharp)
+
+
+        # Step 6: 4阶灰度量化（2bit）
+        thresholds = [64, 128, 192]  # 自定义分割阈值
+        img_quant = np.zeros_like(img)
+        img_quant[img < thresholds[0]] = 0
+        img_quant[(img >= thresholds[0]) & (img < thresholds[1])] = 85
+        img_quant[(img >= thresholds[1]) & (img < thresholds[2])] = 170
+        img_quant[img >= thresholds[2]] = 255
+
+        # Step 7: 保存为 BMP
+        cv2.imwrite(out_path, img_quant)
+
+        save_progress(os.path.basename(video_path), current_frame)
+
+    except ffmpeg.Error as e:
+        print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
+        print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
+        raise
 
 # def fullscreen_filter(self):
 
