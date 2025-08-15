@@ -10,9 +10,15 @@ import signal
 # VIDEO_DIR     = "/home/pi/framebox/backend/videos"
 # CONFIG_FILE   = "/home/pi/framebox/backend/config.json"
 # PROGRESS_FILE = "/home/pi/framebox/backend/progress.json"
-STATUS_FILE   = "/tmp/slowmovie_status.json"
-CMD_FILE      = "/tmp/slowmovie_cmd"
-SEEK_FILE     = "/tmp/slowmovie_seek"
+# STATUS_FILE   = "/tmp/slowmovie_status.json"
+# CMD_FILE      = "/tmp/slowmovie_cmd"
+# SEEK_FILE     = "/tmp/slowmovie_seek"
+
+
+STATUS_FILE   = "/dev/shm/slowmovie_status.json"
+CMD_FILE      = "/dev/shm/slowmovie_cmd"
+SEEK_FILE     = "/dev/shm/slowmovie_seek"
+
 
 VIDEO_DIR     = "./backend/videos"
 CONFIG_FILE   = "./backend/config.json"
@@ -157,6 +163,7 @@ def handle_command():
         executed = False
     elif cmd == "next":
         current_frame += increment
+        current_frame = min(current_frame, total_frames - 1)
     elif cmd == "prev":
         current_frame = max(0, current_frame - increment)
 

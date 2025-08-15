@@ -11,10 +11,11 @@ import cv2
 BASE_DIR = os.path.dirname(__file__)
 VIDEO_DIR = os.path.join(BASE_DIR, 'videos')
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
-STATUS_FILE = '/tmp/slowmovie_status.json'
 CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-CMD_FILE = '/tmp/slowmovie_cmd'
-SEEK_FILE = '/tmp/slowmovie_seek'
+
+STATUS_FILE = '/dev/shm/slowmovie_status.json'
+CMD_FILE = '/dev/shm/slowmovie_cmd'
+SEEK_FILE = '/dev/shm/slowmovie_seek'
 
 os.makedirs(VIDEO_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
