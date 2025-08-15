@@ -41,7 +41,7 @@ except Exception:
     print("No EPD found, using direct image display mode")
     use_epd = False
     epd = None
-    width, height = 720, 480  # 调试分辨率
+    width, height = 800, 480  # 调试分辨率
 
 
 
@@ -214,15 +214,11 @@ def extract_frame(video_path, frame_time, out_path):
         print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
         print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
         raise
-# def overlay_filter(self):
-#     if args.subtitles and videoInfo["subtitle_file"]:
-#         return self.filter("subtitles", videoInfo["subtitle_file"])
-#     elif args.timecode:
-#         return self.drawtext(escape_text=False, text="%{pts:hms}", fontcolor="white", fontsize=24, x="(w-text_w)/2", y="h-(text_h*2)", bordercolor="black", borderw=1)
-#     return self
+
 
 
 # def fullscreen_filter(self):
+
 #     if args.fullscreen:
 #         if videoInfo["aspect_ratio"] > width / height:
 #             return self.filter("crop", f"ih*{width / height}", "ih")
