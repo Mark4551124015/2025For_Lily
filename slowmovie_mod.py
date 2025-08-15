@@ -247,8 +247,8 @@ def extract_frame(video_path, frame_time, out_path):
 #     return self
 
 
-ffmpeg.Stream.overlay_filter = overlay_filter
-ffmpeg.Stream.fullscreen_filter = fullscreen_filter
+# ffmpeg.Stream.overlay_filter = overlay_filter
+# ffmpeg.Stream.fullscreen_filter = fullscreen_filter
 
 
 # ==== 初始化 ====
