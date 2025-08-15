@@ -213,7 +213,7 @@ def extract_frame(video_path, frame_time, out_path):
     except ffmpeg.Error as e:
         print("FFmpeg stdout:\n", e.stdout.decode('utf8', errors='ignore'))
         print("FFmpeg stderr:\n", e.stderr.decode('utf8', errors='ignore'))
-    raise
+        raise
 # def overlay_filter(self):
 #     if args.subtitles and videoInfo["subtitle_file"]:
 #         return self.filter("subtitles", videoInfo["subtitle_file"])
