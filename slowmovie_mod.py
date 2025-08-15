@@ -209,10 +209,10 @@ def extract_frame_picture(video_path, frame_time, out_path):
         ffmpeg
         .input(video_path, ss=frame_time, hwaccel="v4l2m2m")  # 硬件解码（Pi 上可用）
         .filter("scale", "iw*sar", "ih")
-        .fullscreen_filter()
+        # .fullscreen_filter()
         .filter("scale", width, height, force_original_aspect_ratio=1)
         .filter("pad", width, height, -1, -1)
-        .overlay_filter()
+        # .overlay_filter()
         .output(out_path, vframes=1, pix_fmt="rgb24")
         .overwrite_output()
         .run(capture_stdout=True, capture_stderr=True)
@@ -229,6 +229,27 @@ def extract_frame(video_path, frame_time, out_path):
         .overwrite_output()
         .run(quiet=True)
     )
+
+# def overlay_filter(self):
+#     if args.subtitles and videoInfo["subtitle_file"]:
+#         return self.filter("subtitles", videoInfo["subtitle_file"])
+#     elif args.timecode:
+#         return self.drawtext(escape_text=False, text="%{pts:hms}", fontcolor="white", fontsize=24, x="(w-text_w)/2", y="h-(text_h*2)", bordercolor="black", borderw=1)
+#     return self
+
+
+# def fullscreen_filter(self):
+#     if args.fullscreen:
+#         if videoInfo["aspect_ratio"] > width / height:
+#             return self.filter("crop", f"ih*{width / height}", "ih")
+#         elif videoInfo["aspect_ratio"] < width / height:
+#             return self.filter("crop", "iw", f"iw*{height / width}")
+#     return self
+
+
+ffmpeg.Stream.overlay_filter = overlay_filter
+ffmpeg.Stream.fullscreen_filter = fullscreen_filter
+
 
 # ==== 初始化 ====
 videos = list_videos()
