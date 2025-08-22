@@ -5,7 +5,7 @@ import os, sys, time, json, random
 import numpy as np
 from PIL import Image
 import ffmpeg
-from tools import *
+from tools_new import *
 from loguru import logger
 from waveshare_epd import epd7in5_V2 as epd_driver
 import time
@@ -235,7 +235,8 @@ if __name__ == "__main__":
         
         img = Image.open(tmp_frame).convert('L')
         # img_dithered = bayer_dither_4levels(img, levels=4)
-        img_dithered = dither_fs_4gray_hw(img)
+        # img_dithered = dither_fs_4gray_hw(img)
+        img_dithered = make_img(img)
         img_dithered.save(tmp_frame_e)
         finish_time = time.time()
 
